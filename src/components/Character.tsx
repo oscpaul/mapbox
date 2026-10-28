@@ -1,22 +1,18 @@
 import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CapsuleCollider, type RapierRigidBody } from '@react-three/rapier'
-import { useKeyboardControls } from '@react-three/drei'
-import type { BuildingColliderManager } from '../BuildingColliderManager'
-
+import { BuildingColliderManager } from '../physics/BuildingColliderManager'
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 const ORIGIN: [number, number] = [-73.9857, 40.7484]
 const M_LAT = 111_320
 const M_LNG = 111_320 * Math.cos((ORIGIN[1] * Math.PI) / 180)
-const toLngLat = (x: number, z: number): [number, number] => [
-  ORIGIN[0] + x / M_LNG,
-  ORIGIN[1] - z / M_LAT,
-]
+
 
 export default function Character({ 
-managerRef,   map,}: {
+managerRef,   }: {
  managerRef: React.RefObject<BuildingColliderManager | null>
-  map: MapboxMap | null
+
 
  }) {
 

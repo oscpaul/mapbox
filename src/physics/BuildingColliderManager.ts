@@ -121,7 +121,6 @@ export class BuildingColliderManager {
   private disposed = false
   private capped = false
 
-private picked = new Set<string | number>()
 
 //pick(id: string | number): { added: number; removed: number } {
 //  this.picked.add(id)
