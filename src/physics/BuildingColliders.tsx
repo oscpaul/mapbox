@@ -29,6 +29,8 @@ export default function BuildingColliders({ map, onReady, ...opts }: Props) {
       world: world as unknown as BuildingColliderOptions['world'],
     })
     manager.start()
+console.log('NEW manager created')
+manager.setFocus({ x: 0, z: 0 })
     readyRef.current?.(manager)
     return () => manager.dispose()
   }, [map, rapier, world])

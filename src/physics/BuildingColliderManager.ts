@@ -121,11 +121,12 @@ export class BuildingColliderManager {
   private disposed = false
   private capped = false
 
+  private pickedId: string | number | null = null
 
-//pick(id: string | number): { added: number; removed: number } {
-//  this.picked.add(id)
-//  return this.update()
-//}
+pick(id: string | number): { added: number; removed: number } {
+  this.pickedId = id
+  return this.update()
+}
 
 
   constructor(map: MapboxMap, opts: BuildingColliderOptions) {
@@ -146,6 +147,7 @@ export class BuildingColliderManager {
 
   /** Begin tracking the map. Safe to call again after stop(). */
   start(): void {
+
     if (this.running || this.disposed) return
     this.running = true
     this.map.on('idle', this.schedule)
@@ -271,6 +273,7 @@ const added = this.acquire(fx, fz)
     const r2 = this.releaseRadius * this.releaseRadius
     let n = 0
     for (const h of [...this.handles.values()]) {
+  if (this.pickedId != null && h.featureId === this.pickedId) continue
       if (dist2(h.bounds, fx, fz) > r2) {
         this.remove(h.key)
         n++
@@ -293,17 +296,18 @@ if (!this.map.getSource(this.sourceId)) return 0
       sourceLayer: this.sourceLayer,
       filter: ['==', 'extrude', 'true'],
     }) as unknown as SourceFeature[]
-
-    const r2 = this.radius * this.radius
+//console.log('feats', feats.length)
+    //const r2 = this.radius * this.radius
     const seen = new Set<string>()
     const cands: Candidate[] = []
-
+let inCross = 0
     for (const f of feats) {
 
       const height = Number(f.properties?.height)
       const base = Number(f.properties?.min_height ?? 0)
       if (!Number.isFinite(height) || !Number.isFinite(base) || height <= base) continue
 
+    const isPicked = this.pickedId != null && f.id === this.pickedId
 
 
       for (const polygon of toPolygons(f.geometry)) {
@@ -346,8 +350,9 @@ const inVerticalArm =
   bounds.maxZ >= fz - halfLength &&
   bounds.minZ <= fz + halfLength
 
-if (!inHorizontalArm && !inVerticalArm) continue
-
+if (!isPicked && !inHorizontalArm && !inVerticalArm) continue
+inCross++
+//const d2 = isPicked ? 0 : dist2(bounds, fx, fz)
 const d2 = dist2(bounds, fx, fz)
 
 
@@ -362,7 +367,7 @@ const d2 = dist2(bounds, fx, fz)
         cands.push({ key, featureId: f.id ?? null, polygon, height, base, bounds, d2 })
       }
     }
-
+//console.log('focus', fx, fz, 'feats', feats.length, 'inCross', inCross)
     if (!cands.length) return 0
     cands.sort((a, b) => a.d2 - b.d2) // nearest first
 
@@ -374,80 +379,13 @@ const d2 = dist2(bounds, fx, fz)
     for (let i = 0; i < Math.min(budget, cands.length); i++) {
       if (this.add(cands[i])) added++
     }
+//console.log('cands', cands.length)
     if (cands.length > budget && budget > 0) this.schedule() // more waiting, run another pass
     return added
   }
 
 
 
-public pick(featureId: string | number): boolean {
-  if (!this.map.getSource(this.sourceId)) return false
-
-  const feats = this.map.querySourceFeatures(this.sourceId, {
-    sourceLayer: this.sourceLayer,
-    filter: ['==', 'extrude', 'true'],
-  }) as unknown as SourceFeature[]
-
-  for (const f of feats) {
-    if (f.id == null || String(f.id) !== String(featureId)) continue
-
-    const height = Number(f.properties?.height)
-    const base = Number(f.properties?.min_height ?? 0)
-
-    if (!Number.isFinite(height) ||
-        !Number.isFinite(base) ||
-        height <= base) {
-      return false
-    }
-
-    for (const polygon of toPolygons(f.geometry)) {
-      const outer = polygon[0]
-      if (!outer || outer.length < 4) continue
-
-      let minLng = Infinity
-      let maxLng = -Infinity
-      let minLat = Infinity
-      let maxLat = -Infinity
-
-      for (const p of outer) {
-        minLng = Math.min(minLng, p[0])
-        maxLng = Math.max(maxLng, p[0])
-        minLat = Math.min(minLat, p[1])
-        maxLat = Math.max(maxLat, p[1])
-      }
-
-      const [ax, az] = this.project([minLng, minLat])
-      const [bx, bz] = this.project([maxLng, maxLat])
-
-      const bounds: Bounds = {
-        minX: Math.min(ax, bx),
-        maxX: Math.max(ax, bx),
-        minZ: Math.min(az, bz),
-        maxZ: Math.max(az, bz),
-      }
-
-      const key = featureKey(f.id, polygon, height, base)
-
-      if (this.handles.has(key)) return true
-
-      this.rejected.delete(key)
-
-      const candidate: Candidate = {
-        key,
-        featureId: f.id,
-        polygon,
-        height,
-        base,
-        bounds,
-        d2: 0,
-      }
-
-      return this.add(candidate)
-    }
-  }
-
-  return false
-}
 
 
   private add(c: Candidate): boolean {

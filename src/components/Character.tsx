@@ -1,26 +1,17 @@
 import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CapsuleCollider, type RapierRigidBody } from '@react-three/rapier'
-import { BuildingColliderManager } from '../physics/BuildingColliderManager'
-import type { Map as MapboxMap } from 'mapbox-gl';
-
-const ORIGIN: [number, number] = [-73.9857, 40.7484]
-const M_LAT = 111_320
-const M_LNG = 111_320 * Math.cos((ORIGIN[1] * Math.PI) / 180)
 
 
-export default function Character({ 
-managerRef,   }: {
- managerRef: React.RefObject<BuildingColliderManager | null>
+export default function Character({
+  managerRef,
+}: {
+  managerRef: React.RefObject<BuildingColliderManager | null>
+}) {
 
-
- }) {
-
-
-  const body = useRef<RapierRigidBody>(null)
+const body = useRef<RapierRigidBody>(null)
  const keys = useRef({ forward: false, back: false, left: false, right: false })
 
-const last = useRef([0, 0])
 
 useEffect(() => {
   const set = (e: KeyboardEvent, down: boolean) => {
@@ -39,36 +30,27 @@ useEffect(() => {
   }
 }, [])
   useFrame(() => {
-    const b = body.current
+ const b = body.current
     if (!b) return
-
 const { forward, back, left, right } = keys.current
-  
- 
 
-    const speed = 4
-    const dx = (right ? 1 : 0) - (left ? 1 : 0)
-    const dz = (back ? 1 : 0) - (forward ? 1 : 0)
-    const len = Math.hypot(dx, dz) || 1
-    const v = b.linvel()
-    b.setLinvel({ x: (dx / len) * speed, y: v.y, z: (dz / len) * speed }, true)
+  const dx = (right ? 1 : 0) - (left ? 1 : 0)
+const dz = (back ? 1 : 0) - (forward ? 1 : 0)
+ b.setLinvel({ x: (dx / 1) * 4, y: 0, z: (dz / 1) * 4 }, true)
 
     const p = b.translation()
     managerRef.current?.setFocus({ x: p.x, z: p.z })
- if (Math.abs(p.x - last.current[0]) > 0.5 || Math.abs(p.z - last.current[1]) > 0.5) {
-     last.current = [p.x, p.z]
-}
+ 
   })
 
   return (
 <RigidBody
-  ref={body}
- position={[80, 0, 0]}              
-  enabledRotations={[false, false, false]}   
+ ref={body}
+  position={[80, 0, 0]}              
   colliders={false}
 >
-  <CapsuleCollider args={[0.5, 0.35]} position={[0, 0.85, 0]} />    
 
+  <CapsuleCollider args={[0.5, 0.35]} position={[0, 0.85, 0]} />    
 
 <mesh position={[0, 0.85, 0]} scale={5}>
   <capsuleGeometry args={[0.35, 1]} />
