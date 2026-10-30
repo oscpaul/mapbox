@@ -116,7 +116,7 @@ useEffect(() => {
   if (!map) return
   const onClick = (e: any) => {
     const hit = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0]
-    console.log('clicked id', hit?.id)
+  console.log('click', 'hit?', !!hit, 'id', hit?.id, 'manager?', !!managerRef.current)
     if (hit?.id != null) console.log(managerRef.current?.pick(hit.id))
   }
   map.on('click', onClick)
@@ -169,7 +169,7 @@ addSky(e.target)
             <BuildingColliders
               map={map}
               origin={ORIGIN}
-              project={project}
+              project={project_}
               radius={250}
               onReady={(m) => {
 console.log('onReady called')
