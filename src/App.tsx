@@ -9,16 +9,14 @@ import Character from './components/Character'
 import { Perf } from 'r3f-perf'
 import Compass from './Compass'
 
+import FirstPersonCamera from './components/FirstPersonCamera'
+
+
+
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const ORIGIN: [number, number] = [-73.9857, 40.7484]
 
-const project = ([lng, lat]: [number, number]): [number, number] => {
-  const [x, , z] = coordsToVector3(
-    { longitude: lng, latitude: lat },
-    { longitude: ORIGIN[0], latitude: ORIGIN[1] },
-  )
-  return [x, z]
-}
+
 
 function add3DBuildings(map: MapboxMap) {
   if (map.getLayer('3d-buildings')) return
@@ -97,6 +95,24 @@ const project_ = useCallback(([lng, lat]: [number, number]): [number, number] =>
     return [x, z]
   }, [origin])
 
+
+const characterBodyRef = useRef<RapierRigidBody | null>(null)
+
+
+
+const [firstPerson, setFirstPerson] = useState(false)
+
+// press V to toggle
+useEffect(() => {
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code === 'KeyV' && !(e.target instanceof HTMLInputElement)) {
+      setFirstPerson((v) => !v)
+    }
+  }
+  window.addEventListener('keydown', onKey)
+  return () => window.removeEventListener('keydown', onKey)
+}, [])
+
   const jumpTo = (lng: number, lat: number) => {
   if (!map) return
   console.log('1 jump start')
@@ -112,6 +128,13 @@ const project_ = useCallback(([lng, lat]: [number, number]): [number, number] =>
   })
 }
 
+
+useEffect(() => {
+  const t = setTimeout(() => console.log('App ref', characterBodyRef.current), 2000)
+  return () => clearTimeout(t)
+}, [])
+
+
 useEffect(() => {
   if (!map) return
   const onClick = (e: any) => {
@@ -121,17 +144,49 @@ useEffect(() => {
   }
   map.on('click', onClick)
 
+
+
+
+
+
+
+let renders = 0
+let last = performance.now()
+const onRender = () => {
+  renders++
+  const now = performance.now()
+  if (now - last >= 1000) {
+ //   console.log('Mapbox renders/sec:', renders)
+    renders = 0
+    last = now
+  }
+}
+map.on('render', onRender)
+
+
+
+
   const t = setInterval(() => ('manager', managerRef.current?.stats()), 3000)
 
   return () => {
+  map.off('render', onRender)   // add this
+
     map.off('click', onClick)
     clearInterval(t)
   }
+
+
+
+
+
+
+
+
 }, [map])
 
 
   return (
-    <Map
+    <Map maxPitch={85}
       
       mapboxAccessToken={TOKEN}
       initialViewState={{ longitude: ORIGIN[0], latitude: ORIGIN[1], zoom: 17.5, pitch: 55 }}
@@ -144,6 +199,16 @@ addSky(e.target)
         setMap(e.target)
       }}
     >
+
+
+<button
+  onClick={() => setFirstPerson((v) => !v)}
+  style={{ position: 'absolute', top: 40, right: 10, zIndex: 1 }}
+>
+  {firstPerson ? 'Exit first person' : 'First person'}
+</button>
+
+
 { /* <Compass map={map} /> */}
   <input
         placeholder="lng, lat"
@@ -161,7 +226,7 @@ addSky(e.target)
     <Coordinates key={origin.join(',')} longitude={origin[0]} latitude={origin[1]}>
 
         <Suspense fallback={null}>
-          <Physics gravity={[0, -9.81, 0]} debug>
+          <Physics gravity={[0, -9.81, 0]} debug={false}>
             <RigidBody type="fixed">
               <CuboidCollider args={[2000, 0.5, 2000]} position={[0, -0.5, 0]} />
             </RigidBody>
@@ -206,7 +271,15 @@ console.log('onReady called')
               </mesh>
             ))}
 
-            <Character managerRef={managerRef} />
+<Character
+  managerRef={managerRef}
+  bodyRef={characterBodyRef}
+  map={map}
+  followCamera={firstPerson}
+/>
+
+<FirstPersonCamera map={map} body={characterBodyRef} origin={origin} active={firstPerson} debug />
+
           </Physics>
         </Suspense>
   </Coordinates>

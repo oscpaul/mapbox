@@ -203,7 +203,15 @@ pick(id: string | number): { added: number; removed: number } {
     const [fx, fz] = this.focusPoint()
 
 const removed = this.release(fx, fz)
+
+
+const t0 = performance.now()
 const added = this.acquire(fx, fz)
+const ms = performance.now() - t0
+//if (ms > 2) console.log('acquire ms', ms.toFixed(1))
+
+
+
     return { added, removed }
   }
 
@@ -292,10 +300,13 @@ const added = this.acquire(fx, fz)
 
 if (!this.map.getSource(this.sourceId)) return 0
 
-    const feats = this.map.querySourceFeatures(this.sourceId, {
+const t0 = performance.now()
+  const feats = this.map.querySourceFeatures(this.sourceId, {
       sourceLayer: this.sourceLayer,
       filter: ['==', 'extrude', 'true'],
     }) as unknown as SourceFeature[]
+const t1 = performance.now()
+
 //console.log('feats', feats.length)
     //const r2 = this.radius * this.radius
     const seen = new Set<string>()
@@ -368,6 +379,10 @@ const d2 = dist2(bounds, fx, fz)
       }
     }
 //console.log('focus', fx, fz, 'feats', feats.length, 'inCross', inCross)
+
+const t2 = performance.now()
+ // console.log('query', (t1 - t0).toFixed(1), 'loop', (t2 - t1).toFixed(1), 'feats', feats.length)
+
     if (!cands.length) return 0
     cands.sort((a, b) => a.d2 - b.d2) // nearest first
 
