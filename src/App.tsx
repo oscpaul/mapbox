@@ -149,20 +149,39 @@ useEffect(() => {
 
 
 
+ // --- counters ---
+  let renders = 0
+  let calls = 0
+  let traces = 0
+  const original = map.triggerRepaint.bind(map)
 
-let renders = 0
-let last = performance.now()
-const onRender = () => {
-  renders++
-  const now = performance.now()
-  if (now - last >= 1000) {
- //   console.log('Mapbox renders/sec:', renders)
-    renders = 0
-    last = now
+  map.triggerRepaint = () => {
+    calls++
+    if (traces < 3) {
+      traces++
+      console.log('triggerRepaint caller:', new Error().stack)
+    }
+    original()
   }
-}
-map.on('render', onRender)
 
+  const onRender = () => {
+    renders++
+  }
+  map.on('render', onRender)
+
+  const id = setInterval(() => {
+    console.log(`renders/sec: ${renders}  triggerRepaint/sec: ${calls}`)
+    renders = 0
+    calls = 0
+  }, 1000)
+
+  // --- cleanup ---
+  return () => {
+    clearInterval(id)
+    map.off('render', onRender)
+    map.off('click', onClick)
+    map.triggerRepaint = original
+  }
 
 
 
@@ -174,7 +193,6 @@ map.on('render', onRender)
     map.off('click', onClick)
     clearInterval(t)
   }
-
 
 
 
@@ -219,7 +237,7 @@ addSky(e.target)
         }}
         style={{ position: 'absolute', top: 10, right: 10, zIndex: 1 }}
       />
-       <Canvas longitude={ORIGIN[0]} latitude={ORIGIN[1]} shadows> 
+       <Canvas longitude={ORIGIN[0]} latitude={ORIGIN[1]} shadows frameloop="demand"> 
 <Perf position="top-left" />
 
  {ready && (

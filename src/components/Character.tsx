@@ -78,7 +78,7 @@ frames.current++
 const { forward, back, left, right } = keys.current
 
 if (forward || back || left || right) {
-  console.log('keys', { forward, back, left, right }, 'followCamera', followCamera, 'bearing', map?.getBearing())
+ // console.log('keys', { forward, back, left, right }, 'followCamera', followCamera, 'bearing', map?.getBearing())
 }
 
 
@@ -101,7 +101,8 @@ b.setLinvel({ x: (vx / len) * speed, y: 0, z: (vz / len) * speed }, true)
 
 
   const p = b.translation()
-  if (forward || back || left || right) console.log('pos', p.x.toFixed(1), p.y.toFixed(1), p.z.toFixed(1))
+  //if (forward || back || left || right) 
+//console.log('pos', p.x.toFixed(1), p.y.toFixed(1), p.z.toFixed(1))
   managerRef.current?.setFocus({ x: p.x, z: p.z })
  
   })
