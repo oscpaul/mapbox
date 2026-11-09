@@ -125,7 +125,7 @@ export class BuildingColliderManager {
 
 pick(id: string | number): { added: number; removed: number } {
   this.pickedId = id
-  return this.update()
+  return this.update(true)
 }
 
 
@@ -197,23 +197,41 @@ pick(id: string | number): { added: number; removed: number } {
     this.schedule()
   }
 
-  /** Run a pass now instead of waiting for a map event. */
-  update(): { added: number; removed: number } {
-    if (this.disposed) return { added: 0, removed: 0 }
-    const [fx, fz] = this.focusPoint()
-
-const removed = this.release(fx, fz)
 
 
-const t0 = performance.now()
-const added = this.acquire(fx, fz)
-const ms = performance.now() - t0
-//if (ms > 2) console.log('acquire ms', ms.toFixed(1))
+private lastFocus: [number, number] | null = null
+private dirty = true
+
+private readonly onMapChange = (): void => {
+  this.dirty = true   // new tiles may have loaded
+  this.schedule()
+}
 
 
 
-    return { added, removed }
-  }
+update(force = false): { added: number; removed: number } {
+  if (this.disposed) return { added: 0, removed: 0 }
+  const [fx, fz] = this.focusPoint()
+
+  const moved =
+    !this.lastFocus ||
+    Math.hypot(fx - this.lastFocus[0], fz - this.lastFocus[1]) > 1 // metres
+
+  // nothing new to learn: skip the expensive query and loop
+  if (!force && !moved && !this.dirty) return { added: 0, removed: 0 }
+
+  this.lastFocus = [fx, fz]
+  this.dirty = false
+
+  const removed = this.release(fx, fz)
+
+  const t0 = performance.now()
+  const added = this.acquire(fx, fz)
+  const ms = performance.now() - t0
+  if (ms > 2) console.log('acquire ms', ms.toFixed(1))
+
+  return { added, removed }
+}
 
   /** Remove one building's collider. */
   remove(key: string): boolean {
@@ -277,15 +295,36 @@ const ms = performance.now() - t0
     return this.project([c.lng, c.lat])
   }
 
+private readonly halfLength = 60
+private readonly halfWidth = 10
+private readonly releaseMargin = 20 // metres beyond the add area before removing
+
+
+private inCross(b: Bounds, fx: number, fz: number, margin = 0): boolean {
+  const hl = this.halfLength + margin
+  const hw = this.halfWidth + margin
+  const inH =
+    b.maxX >= fx - hl && b.minX <= fx + hl &&
+    b.maxZ >= fz - hw && b.minZ <= fz + hw
+  const inV =
+    b.maxX >= fx - hw && b.minX <= fx + hw &&
+    b.maxZ >= fz - hl && b.minZ <= fz + hl
+  return inH || inV
+}
+
+
+
+
   private release(fx: number, fz: number): number {
-    const r2 = this.releaseRadius * this.releaseRadius
     let n = 0
     for (const h of [...this.handles.values()]) {
   if (this.pickedId != null && h.featureId === this.pickedId) continue
-      if (dist2(h.bounds, fx, fz) > r2) {
-        this.remove(h.key)
-        n++
-      }
+
+if (!this.inCross(h.bounds, fx, fz, this.releaseMargin)) {
+this.remove(h.key)
+n++
+}
+
     }
     return n
   }
@@ -346,22 +385,11 @@ let inCross = 0
 
 
 
-const halfLength = 60
-const halfWidth = 10
 
-const inHorizontalArm =
-  bounds.maxX >= fx - halfLength &&
-  bounds.minX <= fx + halfLength &&
-  bounds.maxZ >= fz - halfWidth &&
-  bounds.minZ <= fz + halfWidth
 
-const inVerticalArm =
-  bounds.maxX >= fx - halfWidth &&
-  bounds.minX <= fx + halfWidth &&
-  bounds.maxZ >= fz - halfLength &&
-  bounds.minZ <= fz + halfLength
 
-if (!isPicked && !inHorizontalArm && !inVerticalArm) continue
+if (!isPicked && !this.inCross(bounds, fx, fz)) continue
+
 inCross++
 //const d2 = isPicked ? 0 : dist2(bounds, fx, fz)
 const d2 = dist2(bounds, fx, fz)
@@ -381,7 +409,7 @@ const d2 = dist2(bounds, fx, fz)
 //console.log('focus', fx, fz, 'feats', feats.length, 'inCross', inCross)
 
 const t2 = performance.now()
- // console.log('query', (t1 - t0).toFixed(1), 'loop', (t2 - t1).toFixed(1), 'feats', feats.length)
+console.log('query', (t1 - t0).toFixed(1), 'loop', (t2 - t1).toFixed(1), 'feats', feats.length)
 
     if (!cands.length) return 0
     cands.sort((a, b) => a.d2 - b.d2) // nearest first
@@ -397,7 +425,7 @@ const t2 = performance.now()
 //console.log('cands', cands.length)
     if (cands.length > budget && budget > 0) this.schedule() // more waiting, run another pass
     return added
-  }
+  }mie
 
 
 

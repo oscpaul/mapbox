@@ -1,6 +1,11 @@
 import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RigidBody, CapsuleCollider, type RapierRigidBody } from '@react-three/rapier'
+import { useThree } from '@react-three/fiber'
+
+import { useRapier } from '@react-three/rapier'
+
+
 
 type Props = {
   managerRef: React.RefObject<BuildingColliderManager | null>
@@ -11,12 +16,18 @@ type Props = {
 
 
 export default function Character({ managerRef, bodyRef, map, followCamera }: Props) {
-
+const invalidate = useThree((s) => s.invalidate)
 const body = useRef<RapierRigidBody>(null)
  const keys = useRef({ forward: false, back: false, left: false, right: false })
 
 
-
+const { world } = useRapier()
+useEffect(() => {
+  const id = setInterval(() => {
+  //  console.log('world bodies', world.bodies.len(), 'manager', managerRef.current?.stats().colliders)
+  }, 2000)
+  return () => clearInterval(id)
+}, [world])
 
 
 
@@ -27,6 +38,7 @@ useEffect(() => {
     if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.current.back = down
     if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.current.left = down
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.current.right = down
+    invalidate() // request a frame when a key changes
     map?.triggerRepaint() // wake the render loop
   }
   const down = (e: KeyboardEvent) => set(e, true)
@@ -42,70 +54,61 @@ useEffect(() => {
 const frames = useRef(0)
 const lastLog = useRef(performance.now())
 
-  useFrame(() => {
-
-
-
-
-
-
-
-const now = performance.now()
-  if (now - lastLog.current > 1000) {
-    lastLog.current = now
-  //  console.log('Character frame', { hasBody: !!bodyRef.current, followCamera })
-  }
-
-
  
 
 
-  
-    
 
 
+const wasMoving = useRef(false)
+
+useFrame(() => {
   const b = bodyRef.current
-frames.current++
+  if (!b) return // guard first
 
-  if (!b) return
+  const { forward, back, left, right } = keys.current
 
+  if (forward) {
+    const t = b.translation()
+ const lv = b.linvel()
+  //console.log('pos', t.x.toFixed(1), t.z.toFixed(1), 'linvel z', lv.z.toFixed(1))
+  }
+  const f = (forward ? 1 : 0) - (back ? 1 : 0)
+  const r = (right ? 1 : 0) - (left ? 1 : 0)
 
+  const yaw = followCamera && map ? (map.getBearing() * Math.PI) / 180 : 0
+  const sin = Math.sin(yaw)
+  const cos = Math.cos(yaw)
 
+  const vx = f * sin + r * cos
+  const vz = -f * cos + r * sin
+  const len = Math.hypot(vx, vz) || 1
+  const speed = 4
 
+  const moving = forward || back || left || right
 
-
-
-const { forward, back, left, right } = keys.current
-
-if (forward || back || left || right) {
- // console.log('keys', { forward, back, left, right }, 'followCamera', followCamera, 'bearing', map?.getBearing())
+if (moving) {
+  b.setLinvel({ x: (vx / len) * speed, y: b.linvel().y, z: (vz / len) * speed }, true)
+  invalidate()
+  map?.triggerRepaint()
+} else if (wasMoving.current) {
+  // just released the keys: stop horizontal motion once, don't force awake
+  b.setLinvel({ x: 0, y: b.linvel().y, z: 0 }, false)
 }
-
-
-const f = (forward ? 1 : 0) - (back ? 1 : 0)
-const r = (right ? 1 : 0) - (left ? 1 : 0)
-
-// bearing: degrees clockwise from north. In this frame +x = east, +z = south.
-const yaw = followCamera && map ? (map.getBearing() * Math.PI) / 180 : 0
-const sin = Math.sin(yaw)
-const cos = Math.cos(yaw)
-
-const vx = f * sin + r * cos
-const vz = -f * cos + r * sin
-const len = Math.hypot(vx, vz) || 1
-const speed = 4
-
-b.setLinvel({ x: (vx / len) * speed, y: 0, z: (vz / len) * speed }, true)
-
-
-
+wasMoving.current = moving
 
   const p = b.translation()
-  //if (forward || back || left || right) 
-//console.log('pos', p.x.toFixed(1), p.y.toFixed(1), p.z.toFixed(1))
   managerRef.current?.setFocus({ x: p.x, z: p.z })
- 
-  })
+
+})
+
+
+
+
+
+
+
+
+
 
   return (
 <RigidBody ref={bodyRef} position={[80, 0, 0]} colliders={false} enabledRotations={[false, false, false]}>

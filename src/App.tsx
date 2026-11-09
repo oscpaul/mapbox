@@ -8,9 +8,9 @@ import type { BuildingColliderManager } from './physics/BuildingColliderManager'
 import Character from './components/Character'
 import { Perf } from 'r3f-perf'
 import Compass from './Compass'
-
 import FirstPersonCamera from './components/FirstPersonCamera'
 
+import { useFrame } from '@react-three/fiber'
 
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
@@ -137,19 +137,8 @@ useEffect(() => {
 
 useEffect(() => {
   if (!map) return
-  const onClick = (e: any) => {
-    const hit = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0]
-  console.log('click', 'hit?', !!hit, 'id', hit?.id, 'manager?', !!managerRef.current)
-    if (hit?.id != null) console.log(managerRef.current?.pick(hit.id))
-  }
-  map.on('click', onClick)
 
-
-
-
-
-
- // --- counters ---
+  // --- counters + spy ---
   let renders = 0
   let calls = 0
   let traces = 0
@@ -157,9 +146,9 @@ useEffect(() => {
 
   map.triggerRepaint = () => {
     calls++
-    if (traces < 3) {
+    if (traces < 6) {
       traces++
-      console.log('triggerRepaint caller:', new Error().stack)
+      console.log('caller:', new Error().stack)
     }
     original()
   }
@@ -175,6 +164,14 @@ useEffect(() => {
     calls = 0
   }, 1000)
 
+  // --- your click handler ---
+  const onClick = (e: any) => {
+    const hit = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0]
+    console.log('click', 'hit?', !!hit, 'id', hit?.id, 'manager?', !!managerRef.current)
+    if (hit?.id != null) console.log(managerRef.current?.pick(hit.id))
+  }
+  map.on('click', onClick)
+
   // --- cleanup ---
   return () => {
     clearInterval(id)
@@ -182,25 +179,43 @@ useEffect(() => {
     map.off('click', onClick)
     map.triggerRepaint = original
   }
-
-
-
-  const t = setInterval(() => ('manager', managerRef.current?.stats()), 3000)
-
-  return () => {
-  map.off('render', onRender)   // add this
-
-    map.off('click', onClick)
-    clearInterval(t)
-  }
-
-
-
-
-
-
-
 }, [map])
+
+
+
+const renderCount = useRef(0)
+renderCount.current++
+const addCount = useRef(0)
+
+const removeCount = useRef(0)
+const prev = useRef<any>({})
+
+const now = { map, shown, origin, ready, firstPerson }
+const changed = Object.keys(now).filter((k) => (now as any)[k] !== prev.current[k])
+if (changed.length) console.log('App rendered, changed:', changed)
+prev.current = now
+
+useEffect(() => {
+  let lastR = 0, lastA = 0
+  const id = setInterval(() => {
+    const r = renderCount.current, a = addCount.current
+    if (r !== lastR || a !== lastA) {
+      console.log(`last second: ${a - lastA} adds, ${removeCount.current} removes total, ${r - lastR} renders`)
+    }
+    lastR = r
+    lastA = a
+  }, 1000)
+  return () => clearInterval(id)
+}, [])
+
+
+
+function Probe() {
+  useFrame(() => console.log('probe frame'))
+  return null
+}
+
+const PROFILE = false // true = constant frames + Perf
 
 
   return (
@@ -237,14 +252,18 @@ addSky(e.target)
         }}
         style={{ position: 'absolute', top: 10, right: 10, zIndex: 1 }}
       />
-       <Canvas longitude={ORIGIN[0]} latitude={ORIGIN[1]} shadows frameloop="demand"> 
-<Perf position="top-left" />
-
+<Canvas
+  longitude={ORIGIN[0]}
+  latitude={ORIGIN[1]}
+  shadows
+  frameloop={PROFILE ? 'always' : 'demand'}
+>
+  {PROFILE && <Perf position="top-left" />}
  {ready && (
     <Coordinates key={origin.join(',')} longitude={origin[0]} latitude={origin[1]}>
 
         <Suspense fallback={null}>
-          <Physics gravity={[0, -9.81, 0]} debug={false}>
+          <Physics gravity={[0, -9.81, 0]} debug={false} updateLoop="independent">
             <RigidBody type="fixed">
               <CuboidCollider args={[2000, 0.5, 2000]} position={[0, -0.5, 0]} />
             </RigidBody>
@@ -260,6 +279,8 @@ console.log('onReady called')
                 managerRef.current = m
 
                 m.on('add', (h) => {
+  addCount.current++
+
                   const t = h.body.translation()
                   setShown((s) => [
                     ...s,
@@ -271,9 +292,13 @@ console.log('onReady called')
                       indices: h.collider.indices()!,
                     },
                   ])
+  //console.log('added', h.key, 'height', h.height, 'triangles', h.triangles, 'at', h.body.translation())
+
                 })
 
                 m.on('remove', (h) => {
+  removeCount.current++
+
                   setShown((s) => s.filter((b) => b.key !== h.key))
                 })
               }}
