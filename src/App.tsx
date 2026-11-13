@@ -13,6 +13,10 @@ import FirstPersonCamera from './components/FirstPersonCamera'
 import { useFrame } from '@react-three/fiber'
 
 
+
+import { useControls } from 'leva'
+
+
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const ORIGIN: [number, number] = [-73.9857, 40.7484]
 
@@ -77,6 +81,63 @@ function addLights(map: MapboxMap) {
     },
   ])
 }
+
+
+
+function LoadingOverlay({ loaded }: { loaded: boolean }) {
+  const [pct, setPct] = useState(0)
+  const [hidden, setHidden] = useState(false)
+
+  // creep toward 90% while waiting
+  useEffect(() => {
+    if (loaded) return
+    const id = setInterval(() => setPct((p) => p + (90 - p) * 0.5), 100)
+    return () => clearInterval(id)
+  }, [loaded])
+
+  // when loaded: snap to 100%, then fade out
+  useEffect(() => {
+    if (!loaded) return
+    setPct(100)
+    const t = setTimeout(() => setHidden(true), 50)
+    return () => clearTimeout(t)
+  }, [loaded])
+
+  // safety net: never block the screen for more than 10s
+  useEffect(() => {
+    const t = setTimeout(() => setHidden(true), 10000)
+    return () => clearTimeout(t)
+  }, [])
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: '#000',
+        zIndex: 10,
+        opacity: hidden ? 0 : 1,
+        transition: 'opacity .5s ease',
+        pointerEvents: hidden ? 'none' : 'auto',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          width: '100%',
+          height: 2,
+          background: '#fff',
+          transformOrigin: 'top left',
+          transform: `scaleX(${pct / 100})`,
+          transition: 'transform 0.03s',
+        }}
+      />
+    </div>
+  )
+}
+
+
 export default function App() {
   const managerRef = useRef<BuildingColliderManager | null>(null)
   const [map, setMap] = useState<MapboxMap | null>(null)
@@ -148,7 +209,7 @@ useEffect(() => {
     calls++
     if (traces < 6) {
       traces++
-      console.log('caller:', new Error().stack)
+ //     console.log('caller:', new Error().stack)
     }
     original()
   }
@@ -159,7 +220,7 @@ useEffect(() => {
   map.on('render', onRender)
 
   const id = setInterval(() => {
-    console.log(`renders/sec: ${renders}  triggerRepaint/sec: ${calls}`)
+  //  console.log(`renders/sec: ${renders}  triggerRepaint/sec: ${calls}`)
     renders = 0
     calls = 0
   }, 1000)
@@ -192,7 +253,7 @@ const prev = useRef<any>({})
 
 const now = { map, shown, origin, ready, firstPerson }
 const changed = Object.keys(now).filter((k) => (now as any)[k] !== prev.current[k])
-if (changed.length) console.log('App rendered, changed:', changed)
+//if (changed.length) console.log('App rendered, changed:', changed)
 prev.current = now
 
 useEffect(() => {
@@ -200,7 +261,7 @@ useEffect(() => {
   const id = setInterval(() => {
     const r = renderCount.current, a = addCount.current
     if (r !== lastR || a !== lastA) {
-      console.log(`last second: ${a - lastA} adds, ${removeCount.current} removes total, ${r - lastR} renders`)
+   //   console.log(`last second: ${a - lastA} adds, ${removeCount.current} removes total, ${r - lastR} renders`)
     }
     lastR = r
     lastA = a
@@ -215,7 +276,12 @@ function Probe() {
   return null
 }
 
-const PROFILE = false // true = constant frames + Perf
+
+const { perfVisible } = useControls({
+    perfVisible: true
+})
+
+
 
 
   return (
@@ -233,6 +299,8 @@ addSky(e.target)
       }}
     >
 
+
+<LoadingOverlay loaded={!!map} />
 
 <button
   onClick={() => setFirstPerson((v) => !v)}
@@ -256,9 +324,9 @@ addSky(e.target)
   longitude={ORIGIN[0]}
   latitude={ORIGIN[1]}
   shadows
-  frameloop={PROFILE ? 'always' : 'demand'}
+  frameloop={perfVisible ? 'always' : 'demand'}
 >
-  {PROFILE && <Perf position="top-left" />}
+  {perfVisible && <Perf position="top-left" />}
  {ready && (
     <Coordinates key={origin.join(',')} longitude={origin[0]} latitude={origin[1]}>
 

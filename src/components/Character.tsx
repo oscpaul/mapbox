@@ -5,6 +5,7 @@ import { useThree } from '@react-three/fiber'
 
 import { useRapier } from '@react-three/rapier'
 
+import * as THREE from 'three'   // add to imports
 
 
 type Props = {
@@ -54,7 +55,25 @@ useEffect(() => {
 const frames = useRef(0)
 const lastLog = useRef(performance.now())
 
- 
+
+
+
+
+
+const gl = useThree((s) => s.gl)
+
+
+useEffect(() => {
+  const id = setInterval(() => {
+  //  console.log({
+  //    geometries: gl.info.memory.geometries,
+  //    textures: gl.info.memory.textures,
+  //    drawCalls: gl.info.render.calls,
+   //   triangles: gl.info.render.triangles,
+   // })
+  }, 2000)
+  return () => clearInterval(id)
+}, [gl])
 
 
 
@@ -99,28 +118,50 @@ wasMoving.current = moving
   const p = b.translation()
   managerRef.current?.setFocus({ x: p.x, z: p.z })
 
+
+
+
+
+const m = meshRef.current
+if (m && moving) {
+  m.getWorldPosition(tmp.current)
+  const f = (v: THREE.Vector3 | { x: number; y: number; z: number }) =>
+    [v.x, v.y, v.z].map((n) => +n.toFixed(3))
+ // console.log({
+  //  rapier: f(b.translation()),            // physics truth
+  //  parentPos: f(m.parent!.position),      // the object Rapier writes to
+  //  meshLocal: f(m.position),              // never changes
+  //  meshWorld: f(tmp.current),
+  //})
+}
+
 })
 
 
+const meshRef = useRef<THREE.Mesh>(null)
+const tmp = useRef(new THREE.Vector3())
 
 
 
 
 
 
+return (
+  <>
+    <RigidBody ref={bodyRef} position={[80, 0, 0]} colliders={false} enabledRotations={[false, false, false]}>
+      <CapsuleCollider args={[0.5, 0.35]} position={[0, 0.85, 0]} />
+
+      {/* original: child of the RigidBody */}
+      <mesh ref={meshRef} position={[0, 0.85, 0]} scale={5}>
+        <capsuleGeometry args={[0.35, 1]} />
+        <meshBasicMaterial color="red" />
+      </mesh>
+    </RigidBody>
+
+  
+  </>
+)
 
 
-  return (
-<RigidBody ref={bodyRef} position={[80, 0, 0]} colliders={false} enabledRotations={[false, false, false]}>
 
-  <CapsuleCollider args={[0.5, 0.35]} position={[0, 0.85, 0]} />    
-
-<mesh position={[0, 0.85, 0]} scale={5}>
-  <capsuleGeometry args={[0.35, 1]} />
-  <meshBasicMaterial color="red" />
-</mesh>
-
-
-</RigidBody>
-              )
 }

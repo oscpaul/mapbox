@@ -15,6 +15,7 @@
     "@react-three/fiber": "^9.8.2",
     "@react-three/rapier": "^2.2.0",
     "earcut": "^3.2.4",
+    "leva": "^0.10.1",
     "mapbox-gl": "^3.33.0",
     "r3f-perf": "^7.2.3",
     "react": "^19.3.1",

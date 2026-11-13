@@ -145,12 +145,37 @@ pick(id: string | number): { added: number; removed: number } {
 
   // ---- lifecycle handles -------------------------------------------------
 
+
+
+
+private stale = false
+private readonly markStale = (e: any): void => {
+  if (e.sourceId === this.sourceId && e.sourceDataType !== 'metadata') {
+    this.stale = true // cheap: just a flag, no rebuild
+  }
+}
+
+private readonly onIdle = (): void => {
+  if (this.stale) {
+    this.stale = false
+    this.index = null // rebuilt on the next pass
+    this.dirty = true
+  }
+  this.schedule()
+}
+
+
+
+
+
+
   /** Begin tracking the map. Safe to call again after stop(). */
   start(): void {
 
     if (this.running || this.disposed) return
     this.running = true
-    this.map.on('idle', this.schedule)
+this.map.on('sourcedata', this.markStale)
+this.map.on('idle', this.onIdle) 
     this.map.on('moveend', this.schedule)
     this.schedule()
   }
@@ -159,7 +184,8 @@ pick(id: string | number): { added: number; removed: number } {
   stop(): void {
     if (!this.running) return
     this.running = false
-    this.map.off('idle', this.schedule)
+this.map.off('sourcedata', this.markStale)
+this.map.off('idle', this.onIdle)
     this.map.off('moveend', this.schedule)
     if (this.timer !== null) {
       clearTimeout(this.timer)
@@ -215,7 +241,7 @@ update(force = false): { added: number; removed: number } {
 
   const moved =
     !this.lastFocus ||
-    Math.hypot(fx - this.lastFocus[0], fz - this.lastFocus[1]) > 1 // metres
+    Math.hypot(fx - this.lastFocus[0], fz - this.lastFocus[1]) > 10 // metres
 
   // nothing new to learn: skip the expensive query and loop
   if (!force && !moved && !this.dirty) return { added: 0, removed: 0 }
@@ -228,8 +254,7 @@ update(force = false): { added: number; removed: number } {
   const t0 = performance.now()
   const added = this.acquire(fx, fz)
   const ms = performance.now() - t0
-  if (ms > 2) console.log('acquire ms', ms.toFixed(1))
-
+console.log('acquire ms', ms.toFixed(2), 'added', added, 'index', this.index?.length, 'colliders', this.handles.size)
   return { added, removed }
 }
 
@@ -329,70 +354,88 @@ n++
     return n
   }
 
+
+
+
+
+
+
+
+
+
+private index:
+  | { key: string; featureId: string | number | null; polygon: number[][][]; height: number; base: number; bounds: Bounds }[]
+  | null = null
+
+
+private buildIndex(): void {
+  const feats = this.map.querySourceFeatures(this.sourceId, {
+    sourceLayer: this.sourceLayer,
+    filter: ['==', 'extrude', 'true'],
+  }) as unknown as SourceFeature[]
+
+  const seen = new Set<string>()
+  const out: NonNullable<typeof this.index> = []
+
+  for (const f of feats) {
+    const height = Number(f.properties?.height)
+    const base = Number(f.properties?.min_height ?? 0)
+    if (!Number.isFinite(height) || !Number.isFinite(base) || height <= base) continue
+
+    for (const polygon of toPolygons(f.geometry)) {
+      const outer = polygon[0]
+      if (!outer || outer.length < 4) continue
+
+      let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
+      for (const p of outer) {
+        if (p[0] < minLng) minLng = p[0]
+        if (p[0] > maxLng) maxLng = p[0]
+        if (p[1] < minLat) minLat = p[1]
+        if (p[1] > maxLat) maxLat = p[1]
+      }
+      const [ax, az] = this.project([minLng, minLat])
+      const [bx, bz] = this.project([maxLng, maxLat])
+      const bounds: Bounds = {
+        minX: Math.min(ax, bx), maxX: Math.max(ax, bx),
+        minZ: Math.min(az, bz), maxZ: Math.max(az, bz),
+      }
+
+      const key = featureKey(f.id, polygon, height, base)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ key, featureId: f.id ?? null, polygon, height, base, bounds })
+    }
+  }
+  this.index = out
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   private acquire(fx: number, fz: number): number {
-
-    
-
-
-
 
 
 if (!this.map.getSource(this.sourceId)) return 0
+if (!this.index) this.buildIndex()
 
-const t0 = performance.now()
-  const feats = this.map.querySourceFeatures(this.sourceId, {
-      sourceLayer: this.sourceLayer,
-      filter: ['==', 'extrude', 'true'],
-    }) as unknown as SourceFeature[]
-const t1 = performance.now()
-
-//console.log('feats', feats.length)
-    //const r2 = this.radius * this.radius
-    const seen = new Set<string>()
-    const cands: Candidate[] = []
-let inCross = 0
-    for (const f of feats) {
-
-      const height = Number(f.properties?.height)
-      const base = Number(f.properties?.min_height ?? 0)
-      if (!Number.isFinite(height) || !Number.isFinite(base) || height <= base) continue
-
-    const isPicked = this.pickedId != null && f.id === this.pickedId
-
-
-      for (const polygon of toPolygons(f.geometry)) {
-        const outer = polygon[0]
-        if (!outer || outer.length < 4) continue
-
-        // Cheap radius test on the lng/lat bbox before hashing or triangulating anything.
-        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
-        for (const p of outer) {
-          if (p[0] < minLng) minLng = p[0]
-          if (p[0] > maxLng) maxLng = p[0]
-          if (p[1] < minLat) minLat = p[1]
-          if (p[1] > maxLat) maxLat = p[1]
-        }
-        const [ax, az] = this.project([minLng, minLat])
-        const [bx, bz] = this.project([maxLng, maxLat])
-        const bounds: Bounds = {
-          minX: Math.min(ax, bx),
-          maxX: Math.max(ax, bx),
-          minZ: Math.min(az, bz),
-          maxZ: Math.max(az, bz),
-        }
-       // const d2 = dist2(bounds, fx, fz)
-       // if (d2 > r2) continue
-
-
-
-
-
-
-if (!isPicked && !this.inCross(bounds, fx, fz)) continue
-
-inCross++
-//const d2 = isPicked ? 0 : dist2(bounds, fx, fz)
-const d2 = dist2(bounds, fx, fz)
+const cands: Candidate[] = []
+for (const e of this.index!) {
+  const isPicked = this.pickedId != null && e.featureId === this.pickedId
+  if (!isPicked && !this.inCross(e.bounds, fx, fz)) continue
+  if (this.handles.has(e.key) || this.rejected.has(e.key)) continue
+  cands.push({ ...e, d2: dist2(e.bounds, fx, fz) })
+}
 
 
 
@@ -400,18 +443,7 @@ const d2 = dist2(bounds, fx, fz)
 
 
 
-        const key = featureKey(f.id, polygon, height, base)
-        if (this.handles.has(key) || this.rejected.has(key) || seen.has(key)) continue
-        seen.add(key)
-        cands.push({ key, featureId: f.id ?? null, polygon, height, base, bounds, d2 })
-      }
-    }
-//console.log('focus', fx, fz, 'feats', feats.length, 'inCross', inCross)
 
-const t2 = performance.now()
-console.log('query', (t1 - t0).toFixed(1), 'loop', (t2 - t1).toFixed(1), 'feats', feats.length)
-
-    if (!cands.length) return 0
     cands.sort((a, b) => a.d2 - b.d2) // nearest first
 
     const room = this.maxColliders - this.handles.size
